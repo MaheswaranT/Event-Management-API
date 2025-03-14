@@ -2,6 +2,9 @@ from rest_framework import generics, permissions, filters
 from .models import Community, Event
 from .serializers import CommunitySerializer, EventSerializer
 from django.utils.timezone import now
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
 
 # List and Create Community
 class CommunityListCreateView(generics.ListCreateAPIView):
@@ -16,26 +19,25 @@ class CommunityDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]  # Only authenticated users
 
 # List and Create Events
-class EventListCreateView(generics.ListCreateAPIView):
-    queryset = Event.objects.all()
+class EventCreateView(generics.CreateAPIView):
     serializer_class = EventSerializer
-    permission_classes = [permissions.AllowAny]  # Open access for now
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ['date']  # Allow sorting by date
+    permission_classes = [IsAuthenticated]  # Only logged-in users can create events
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        filter_type = self.request.query_params.get('filter', None)
+    def perform_create(self, serializer):
+        community_id = self.request.data.get('community')
+        try:
+            community = Community.objects.get(id=community_id)
+        except Community.DoesNotExist:
+            return Response({"error": "Community not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if filter_type == "past":
-            return queryset.filter(date__lt=now())  # Past events
-        elif filter_type == "future":
-            return queryset.filter(date__gte=now())  # Future events
-
-        return queryset  # Return all events by default
+        serializer.save(created_by=self.request.user, community=community)
 
 # Retrieve, Update, Delete Event
 class EventDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated]  # Only authenticated users
+
+class EventListCreateView(generics.ListCreateAPIView):
+    queryset = Event.objects.all()
+    serializer_class = EventSerializer
